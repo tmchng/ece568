@@ -8,6 +8,8 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
+#include "ssl_common.h"
+
 #define PORT 8765
 
 /* use these strings to tell the marker what is happening */
@@ -22,9 +24,9 @@ int main(int argc, char **argv)
   struct sockaddr_in sin;
   int val=1;
   pid_t pid;
-  
+
   /*Parse command line arguments*/
-  
+
   switch(argc){
     case 1:
       break;
@@ -45,37 +47,37 @@ int main(int argc, char **argv)
     close(sock);
     exit(0);
   }
-  
+
   memset(&sin,0,sizeof(sin));
   sin.sin_addr.s_addr=INADDR_ANY;
   sin.sin_family=AF_INET;
   sin.sin_port=htons(port);
-  
+
   setsockopt(sock,SOL_SOCKET,SO_REUSEADDR, &val,sizeof(val));
-    
+
   if(bind(sock,(struct sockaddr *)&sin, sizeof(sin))<0){
     perror("bind");
     close(sock);
     exit (0);
   }
-  
+
   if(listen(sock,5)<0){
     perror("listen");
     close(sock);
     exit (0);
-  } 
-  
+  }
+
   while(1){
-    
+
     if((s=accept(sock, NULL, 0))<0){
       perror("accept");
       close(sock);
       close(s);
       exit (0);
     }
-    
+
     /*fork a child to handle the connection*/
-    
+
     if((pid=fork())){
       close(s);
     }
@@ -94,7 +96,7 @@ int main(int argc, char **argv)
       return 0;
     }
   }
-  
+
   close(sock);
   return 1;
 }

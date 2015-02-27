@@ -8,6 +8,9 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
+// Added for sharing common ssl functions.
+#include "ssl_common.h"
+
 #define HOST "localhost"
 #define PORT 8765
 
@@ -20,17 +23,59 @@
 #define FMT_NO_VERIFY "ECE568-CLIENT: Certificate does not verify\n"
 #define FMT_INCORRECT_CLOSE "ECE568-CLIENT: Premature close\n"
 
+#define PWD "password"
+
+int tcp_connect(char *host, int port) {
+  int sock;
+  struct sockaddr_in addr;
+  struct hostent *host_entry;
+
+  /*get ip address of the host*/
+  host_entry = gethostbyname(host);
+
+  if (!host_entry){
+    fprintf(stderr,"Couldn't resolve host");
+    exit(0);
+  }
+
+  memset(&addr,0,sizeof(addr));
+  addr.sin_addr=*(struct in_addr *) host_entry->h_addr_list[0];
+  addr.sin_family=AF_INET;
+  addr.sin_port=htons(port);
+
+  printf("Connecting to %s(%s):%d\n", host, inet_ntoa(addr.sin_addr),port);
+
+  /*open socket*/
+  if((sock=socket(AF_INET, SOCK_STREAM, IPPROTO_TCP))<0) {
+    perror("socket");
+    sock = 0;
+  }
+  if(connect(sock,(struct sockaddr *)&addr, sizeof(addr))<0) {
+    perror("connect");
+    sock = 0;
+  }
+
+  return sock;
+}
+
+void ssl_init() {
+  SSL_library_init();
+  SSL_load_error_strings();
+}
+
+void ssl_connect() {
+  ssl_init();
+}
+
 int main(int argc, char **argv)
 {
   int len, sock, port=PORT;
   char *host=HOST;
-  struct sockaddr_in addr;
-  struct hostent *host_entry;
   char buf[256];
   char *secret = "What's the question?";
-  
+
   /*Parse command line arguments*/
-  
+
   switch(argc){
     case 1:
       break;
@@ -46,37 +91,20 @@ int main(int argc, char **argv)
       printf("Usage: %s server port\n", argv[0]);
       exit(0);
   }
-  
-  /*get ip address of the host*/
-  
-  host_entry = gethostbyname(host);
-  
-  if (!host_entry){
-    fprintf(stderr,"Couldn't resolve host");
-    exit(0);
+
+  sock = tcp_connect(host, port);
+  if (sock) {
+    send(sock, secret, strlen(secret),0);
+    len = recv(sock, &buf, 255, 0);
+    buf[len]='\0';
+  } else {
+    perror("Connect failed");
+    return 0;
   }
 
-  memset(&addr,0,sizeof(addr));
-  addr.sin_addr=*(struct in_addr *) host_entry->h_addr_list[0];
-  addr.sin_family=AF_INET;
-  addr.sin_port=htons(port);
-  
-  printf("Connecting to %s(%s):%d\n", host, inet_ntoa(addr.sin_addr),port);
-  
-  /*open socket*/
-  
-  if((sock=socket(AF_INET, SOCK_STREAM, IPPROTO_TCP))<0)
-    perror("socket");
-  if(connect(sock,(struct sockaddr *)&addr, sizeof(addr))<0)
-    perror("connect");
-  
-  send(sock, secret, strlen(secret),0);
-  len = recv(sock, &buf, 255, 0);
-  buf[len]='\0';
-  
   /* this is how you output something for the marker to pick up */
   printf(FMT_OUTPUT, secret, buf);
-  
+
   close(sock);
   return 1;
 }

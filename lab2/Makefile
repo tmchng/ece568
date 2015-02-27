@@ -4,7 +4,7 @@ LIBS := -lssl -lcrypto
 LDFLAGS := $(LIBS)
 RM := rm -f
 
-sources := client.c server.c 
+sources := client.c server.c ssl_common.c
 targets := client server 
 
 .PHONY: clean default all
@@ -12,10 +12,10 @@ targets := client server
 default: all
 all: $(targets)
 
-client: client.o
+client: client.o ssl_common.o
 	$(CC) $(LDFLAGS) -o client client.o
 
-server: server.o
+server: server.o ssl_common.o
 	$(CC) $(LDFLAGS) -o server server.o
 
 
@@ -24,6 +24,9 @@ client.o: client.c
 
 server.o: server.c
 	$(CC) $(CFLAGS) -c -o server.o  server.c
+
+ssl_common.o: ssl_common.c
+	$(CC) $(CFLAGS) -c -o ssl_common.o ssl_common.c
 
 clean:
 	$(RM) $(targets) $(sources:.c=.o) *~
