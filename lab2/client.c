@@ -28,6 +28,14 @@
 #define FMT_INCORRECT_CLOSE "ECE568-CLIENT: Premature close\n"
 
 
+// Structure for packaging things needed to open/close connection
+struct SSL_PKG {
+  int tcp_socket;
+  SSL *ssl;
+  SSL_CTX *ssl_ctx;
+};
+
+
 int tcp_connect(char *host, int port) {
   int sock;
   struct sockaddr_in addr;
@@ -109,6 +117,7 @@ void check_cert(SSL *ssl, char *correct_CN, char *correct_email) {
   X509_NAME *peer_subject_name;
   char peer_CN[STR_LEN];
   char peer_email[STR_LEN];
+  char issuer_name[STR_LEN];
   int error = 0;
 
   if (SSL_get_verify_result(ssl) != X509_V_OK) {
@@ -122,6 +131,7 @@ void check_cert(SSL *ssl, char *correct_CN, char *correct_email) {
   peer_subject_name = X509_get_subject_name(peer);
   X509_NAME_get_text_by_NID(peer_subject_name, NID_commonName, peer_CN, STR_LEN);
   X509_NAME_get_text_by_NID(peer_subject_name, OBJ_txt2nid("emailAddress"), peer_email, STR_LEN);
+  X509_NAME_oneline(X509_get_issuer_name(peer), issuer_name, STR_LEN);
 
   // Check CN
   if (strcasecmp(peer_CN, correct_CN)) {
@@ -139,6 +149,9 @@ void check_cert(SSL *ssl, char *correct_CN, char *correct_email) {
   if (error) {
     exit(EXIT_FAILURE);
   }
+
+  // Print verified server info
+  printf(FMT_SERVER_INFO, peer_CN, peer_email, issuer_name);
 }
 
 
@@ -155,17 +168,17 @@ void ssl_init() {
 }
 
 
-void ssl_connect(char* host, int port, char *keyfile, char *password) {
+struct SSL_PKG* ssl_connect(char* host, int port, char *keyfile, char *password) {
   SSL_CTX *ctx;
   X509 *cert = NULL;
   X509_NAME *cert_name = NULL;
   SSL *ssl;
-  int tcp_sock;
+  int tcp_socket;
 
   // Create tcp connection
-  tcp_sock = tcp_connect(host, port);
+  tcp_socket = tcp_connect(host, port);
 
-  if (tcp_sock == 0) {
+  if (tcp_socket == 0) {
     exit(EXIT_FAILURE);
   }
 
@@ -175,7 +188,7 @@ void ssl_connect(char* host, int port, char *keyfile, char *password) {
   ctx = init_ctx(CLIENT_KEYFILE, CLIENT_KEYFILE_PWD, SSL_OP_NO_SSLv2);
   ssl = SSL_new(ctx);
 
-  if (!SSL_set_fd(ssl, tcp_sock)) {
+  if (!SSL_set_fd(ssl, tcp_socket)) {
     printf(FMT_CONNECT_ERR);
     printf("Cannot join ssl and tcp handle\n");
   }
@@ -188,6 +201,62 @@ void ssl_connect(char* host, int port, char *keyfile, char *password) {
 
   // Check certificate
   check_cert(ssl, SERVER_CERT_CN, SERVER_CERT_EMAIL);
+
+  // Return the connection objects as a package
+  struct SSL_PKG *pkg = malloc(sizeof(struct SSL_PKG));
+  pkg->ssl = ssl;
+  pkg->tcp_socket = tcp_socket;
+  pkg->ssl_ctx = ctx;
+  return pkg;
+}
+
+
+void ssl_disconnect(struct SSL_PKG *pkg) {
+  if (pkg->tcp_socket) {
+    close(pkg->tcp_socket);
+  }
+
+  if (pkg->ssl) {
+    switch(SSL_shutdown(pkg->ssl)) {
+      case 1:
+        // SSL shutdown properly
+        break;
+      case 0:
+      case -1:
+      default:
+        printf(FMT_INCORRECT_CLOSE);
+        break;
+    }
+  }
+
+  if (pkg->ssl_ctx) {
+    SSL_CTX_free(pkg->ssl_ctx);
+  }
+
+  free(pkg);
+}
+
+
+void test_tcp(char *host, int port) {
+  // The original code for connecting to the server
+  int len, sock;
+  char buf[256];
+  char *secret = "What's the question?";
+  sock = tcp_connect(host, port);
+  if (sock) {
+    send(sock, secret, strlen(secret),0);
+    len = recv(sock, &buf, 255, 0);
+    buf[len]='\0';
+  } else {
+    perror("Connect failed");
+    exit(EXIT_FAILURE);
+  }
+
+  /* this is how you output something for the marker to pick up */
+  printf(FMT_OUTPUT, secret, buf);
+
+  close(sock);
+
 }
 
 
@@ -199,7 +268,6 @@ int main(int argc, char **argv)
   char *secret = "What's the question?";
 
   /*Parse command line arguments*/
-
   switch(argc){
     case 1:
       break;
@@ -216,19 +284,7 @@ int main(int argc, char **argv)
       exit(0);
   }
 
-  sock = tcp_connect(host, port);
-  if (sock) {
-    send(sock, secret, strlen(secret),0);
-    len = recv(sock, &buf, 255, 0);
-    buf[len]='\0';
-  } else {
-    perror("Connect failed");
-    return 0;
-  }
+  test_tcp(host, port);
 
-  /* this is how you output something for the marker to pick up */
-  printf(FMT_OUTPUT, secret, buf);
-
-  close(sock);
   return 1;
 }
