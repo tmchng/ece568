@@ -68,13 +68,19 @@ void ssl_init() {
   //ERR_load_crypto_strings();
 }
 
+
 void ssl_connect() {
   ssl_init();
 }
 
-void check_cert(SSL *ssl, char *host) {
+
+void check_cert(SSL *ssl, char *correct_CN, char *correct_email) {
+  const int STR_LEN = 256;
   X509 *peer;
-  char peer_CN[256];
+  X509_NAME *peer_subject_name;
+  char peer_CN[STR_LEN];
+  char peer_email[STR_LEN];
+  int error = 0;
 
   if (SSL_get_verify_result(ssl) != X509_V_OK) {
     printf(FMT_NO_VERIFY);
@@ -82,7 +88,27 @@ void check_cert(SSL *ssl, char *host) {
   }
 
   peer = SSL_get_peer_certificate(ssl);
-  // TODO: continue from here
+  peer_subject_name = X509_get_subject_name(peer);
+
+  // Get Common Name
+  X509_NAME_get_text_by_NID(peer_subject_name, NID_commonName, peer_CN, STR_LEN);
+  // Get email address
+  X509_NAME_get_text_by_NID(peer_subject_name, OBJ_txt2nid("emailAddress"), peer_email, STR_LEN);
+
+  // Check CN
+  if (strcasecmp(peer_CN, correct_CN)) {
+    printf(FMT_CN_MISMATCH);
+    error = 1;
+  }
+  // Check email
+  if (strcasecmp(peer_email, correct_email)) {
+    printf(FMT_EMAIL_MISMATCH);
+    error = 1;
+  }
+
+  if (error) {
+    exit(EXIT_FAILURE);
+  }
 }
 
 int main(int argc, char **argv)
