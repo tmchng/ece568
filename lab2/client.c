@@ -27,7 +27,6 @@
 #define FMT_NO_VERIFY "ECE568-CLIENT: Certificate does not verify\n"
 #define FMT_INCORRECT_CLOSE "ECE568-CLIENT: Premature close\n"
 
-#define PWD "password"
 
 int tcp_connect(char *host, int port) {
   int sock;
@@ -118,6 +117,13 @@ void check_cert(SSL *ssl, char *correct_CN, char *correct_email) {
     exit(EXIT_FAILURE);
   }
 
+  // Obtain CN and email address
+  peer = SSL_get_peer_certificate(ssl);
+  peer_subject_name = X509_get_subject_name(peer);
+  X509_NAME_get_text_by_NID(peer_subject_name, NID_commonName, peer_CN, STR_LEN);
+  X509_NAME_get_text_by_NID(peer_subject_name, OBJ_txt2nid("emailAddress"), peer_email, STR_LEN);
+
+  // Check CN
   if (strcasecmp(peer_CN, correct_CN)) {
     printf(FMT_CN_MISMATCH);
     ERR_print_errors(bio_err);
