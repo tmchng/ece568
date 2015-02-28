@@ -17,6 +17,7 @@
 #define CLIENT_KEYFILE_PWD "password"
 #define SERVER_CERT_CN "Bob's Server"
 #define SERVER_CERT_EMAIL "ece568bob@ecf.utoronto.ca"
+#define SSL_MAX_READ_LEN 256
 
 /* use these strings to tell the marker what is happening */
 #define FMT_CONNECT_ERR "ECE568-CLIENT: SSL connect error\n"
@@ -128,6 +129,10 @@ void check_cert(SSL *ssl, char *correct_CN, char *correct_email) {
 
   // Obtain CN and email address
   peer = SSL_get_peer_certificate(ssl);
+  if (!peer) {
+    printf(FMT_CONNECT_ERR);
+    exit(EXIT_FAILURE);
+  }
   peer_subject_name = X509_get_subject_name(peer);
   X509_NAME_get_text_by_NID(peer_subject_name, NID_commonName, peer_CN, STR_LEN);
   X509_NAME_get_text_by_NID(peer_subject_name, OBJ_txt2nid("emailAddress"), peer_email, STR_LEN);
@@ -170,8 +175,6 @@ void ssl_init() {
 
 struct SSL_PKG* ssl_connect(char* host, int port, char *keyfile, char *password) {
   SSL_CTX *ctx;
-  X509 *cert = NULL;
-  X509_NAME *cert_name = NULL;
   SSL *ssl;
   int tcp_socket;
 
@@ -190,13 +193,17 @@ struct SSL_PKG* ssl_connect(char* host, int port, char *keyfile, char *password)
 
   if (!SSL_set_fd(ssl, tcp_socket)) {
     printf(FMT_CONNECT_ERR);
+    ERR_print_errors(bio_err);
     printf("Cannot join ssl and tcp handle\n");
+    exit(EXIT_FAILURE);
   }
 
   // Initiate SSL handshake
   if (SSL_connect(ssl) <= 0) {
     printf(FMT_CONNECT_ERR);
-    printf("SSL connect error\n");
+    ERR_print_errors(bio_err);
+    printf("SSL_connect function error\n");
+    exit(EXIT_FAILURE);
   }
 
   // Check certificate
@@ -212,12 +219,22 @@ struct SSL_PKG* ssl_connect(char* host, int port, char *keyfile, char *password)
 
 
 void ssl_disconnect(struct SSL_PKG *pkg) {
-  if (pkg->tcp_socket) {
-    close(pkg->tcp_socket);
-  }
+  int result;
 
   if (pkg->ssl) {
-    switch(SSL_shutdown(pkg->ssl)) {
+    result = SSL_shutdown(pkg->ssl);
+    if (!result) {
+      /*
+       * If we called SSL_shutdown() first then
+       * we always get return value of ’0’. In this case,
+       * try again, but first send a TCP FIN to trigger the
+       * other side’s close_notify
+       */
+      shutdown(pkg->tcp_socket, 1);
+      result = SSL_shutdown(pkg->ssl);
+    }
+
+    switch(result) {
       case 1:
         // SSL shutdown properly
         break;
@@ -229,11 +246,56 @@ void ssl_disconnect(struct SSL_PKG *pkg) {
     }
   }
 
+  if (pkg->tcp_socket) {
+    close(pkg->tcp_socket);
+  }
+
   if (pkg->ssl_ctx) {
     SSL_CTX_free(pkg->ssl_ctx);
   }
 
   free(pkg);
+}
+
+
+void ssl_write(struct SSL_PKG *pkg, char *msg) {
+  int result;
+  if (pkg && pkg->ssl) {
+    result = SSL_write(pkg->ssl, msg, strlen(msg));
+    switch(SSL_get_error(pkg->ssl, result)) {
+      case SSL_ERROR_NONE:
+        if (strlen(msg) != result) {
+          printf("Incomplete write\n");
+          exit(EXIT_FAILURE);
+        }
+        break;
+      default:
+        printf("SSL write problem\n");
+        ERR_print_errors(bio_err);
+        exit(EXIT_FAILURE);
+    }
+  }
+}
+
+
+void ssl_read(struct SSL_PKG *pkg, char *buf, const int read_len) {
+  int result;
+  if (pkg && pkg->ssl) {
+    result = SSL_read(pkg->ssl, buf, read_len);
+
+    switch(SSL_get_error(pkg->ssl, result)) {
+      case SSL_ERROR_SYSCALL:
+        // Premature close according to the pdf
+        printf(FMT_INCORRECT_CLOSE);
+        break;
+      case SSL_ERROR_NONE:
+      case SSL_ERROR_ZERO_RETURN:
+      default:
+        printf("SSL read problem\n");
+        ERR_print_errors(bio_err);
+        exit(EXIT_FAILURE);
+    }
+  }
 }
 
 
@@ -256,13 +318,12 @@ void test_tcp(char *host, int port) {
   printf(FMT_OUTPUT, secret, buf);
 
   close(sock);
-
 }
 
 
 int main(int argc, char **argv)
 {
-  int len, sock, port=PORT;
+  int port=PORT;
   char *host=HOST;
   char buf[256];
   char *secret = "What's the question?";
@@ -284,7 +345,14 @@ int main(int argc, char **argv)
       exit(0);
   }
 
-  test_tcp(host, port);
+  // Original code
+  //test_tcp(host, port);
+
+  // Lab2
+  struct SSL_PKG *pkg = ssl_connect(host, port, CLIENT_KEYFILE, CLIENT_KEYFILE_PWD);
+  ssl_write(pkg, secret);
+  ssl_read(pkg, buf, SSL_MAX_READ_LEN);
+  printf(FMT_OUTPUT, secret, buf);
 
   return 1;
 }
