@@ -191,6 +191,16 @@ struct SSL_PKG* ssl_connect(char* host, int port, char *keyfile, char *password)
   ctx = init_ctx(CLIENT_KEYFILE, CLIENT_KEYFILE_PWD, SSL_OP_NO_SSLv2);
   ssl = SSL_new(ctx);
 
+  // Enforce SHA1 cipher
+  const char *cipher_list = "SHA1";
+  if(!SSL_set_cipher_list(ssl, cipher_list)) {
+    printf(FMT_CONNECT_ERR);
+    ERR_print_errors(bio_err);
+    printf("Cannot set cipher list: %s\n", cipher_list);
+    exit(EXIT_FAILURE);
+  }
+
+  // Join ssl and tcp handles
   if (!SSL_set_fd(ssl, tcp_socket)) {
     printf(FMT_CONNECT_ERR);
     ERR_print_errors(bio_err);
