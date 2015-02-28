@@ -13,6 +13,8 @@
 
 #define HOST "localhost"
 #define PORT 8765
+#define SERVER_CERT_CN "Bob's Server"
+#define SERVER_CERT_EMAIL "ece568bob@ecf.utoronto.ca"
 
 /* use these strings to tell the marker what is happening */
 #define FMT_CONNECT_ERR "ECE568-CLIENT: SSL connect error\n"
@@ -59,12 +61,28 @@ int tcp_connect(char *host, int port) {
 }
 
 void ssl_init() {
+  //OpenSSL_add_all_algorithms();
   SSL_library_init();
   SSL_load_error_strings();
+  ERR_load_BIO_strings();
+  //ERR_load_crypto_strings();
 }
 
 void ssl_connect() {
   ssl_init();
+}
+
+void check_cert(SSL *ssl, char *host) {
+  X509 *peer;
+  char peer_CN[256];
+
+  if (SSL_get_verify_result(ssl) != X509_V_OK) {
+    printf(FMT_NO_VERIFY);
+    exit(EXIT_FAILURE);
+  }
+
+  peer = SSL_get_peer_certificate(ssl);
+  // TODO: continue from here
 }
 
 int main(int argc, char **argv)

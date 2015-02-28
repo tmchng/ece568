@@ -6,6 +6,7 @@
 
 #define _ssl_common_h
 #include <openssl/ssl.h>
+#include <openssl/err.h>
 
 
 #endif
