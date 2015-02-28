@@ -13,10 +13,10 @@ default: all
 all: $(targets)
 
 client: client.o ssl_common.o
-	$(CC) $(LDFLAGS) -o client client.o
+	$(CC) client.o ssl_common.o -o client $(LDFLAGS)
 
 server: server.o ssl_common.o
-	$(CC) $(LDFLAGS) -o server server.o
+	$(CC) server.o ssl_common.o -o server $(LDFLAGS)
 
 
 client.o: client.c
