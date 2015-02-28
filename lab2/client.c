@@ -230,6 +230,7 @@ void ssl_disconnect(struct SSL_PKG *pkg) {
        * try again, but first send a TCP FIN to trigger the
        * other side’s close_notify
        */
+      printf("At weird disconnect case\n");
       shutdown(pkg->tcp_socket, 1);
       result = SSL_shutdown(pkg->ssl);
     }
@@ -353,6 +354,7 @@ int main(int argc, char **argv)
   ssl_write(pkg, secret);
   ssl_read(pkg, buf, SSL_MAX_READ_LEN);
   printf(FMT_OUTPUT, secret, buf);
+  ssl_disconnect(pkg);
 
   return 1;
 }
