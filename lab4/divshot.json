@@ -1,0 +1,9 @@
+{
+  "name": "chengti2-lab4",
+  "root": "./app",
+  "clean_urls": false,
+  "error_page": "error.html",
+  "redirects": {
+    "/": "/login.html"
+  }
+}

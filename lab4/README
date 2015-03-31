@@ -1,0 +1,7 @@
+Published using Divshot:
+
+npm install divshot-cli
+divshot login
+divshot push
+
+The published content can be viewed at http://development.chengti2-lab4.divshot.io/
